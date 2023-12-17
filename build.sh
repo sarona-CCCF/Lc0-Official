@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 
-set -e
+pushd "$(dirname "$0")"
 
-# Move to this script's directory.
-CDPATH= cd -- "$(dirname -- "$0")"
+set -e
 
 case $1 in
   plain|debug|debugoptimized|release|minsize)
@@ -17,19 +16,27 @@ esac
 
 BUILDDIR=build/${BUILDTYPE}
 
-MESON=$(PATH="${PATH}:${HOME}/.local/bin" command -v meson || :)
-MESON=${MESON:?"Could not find meson. Is it installed and in PATH?"}
-
-if [ -f "${BUILDDIR}/build.ninja" ]
+if ! hash meson 2>/dev/null && [ -x ${HOME}/.local/bin/meson ]
 then
-  "${MESON}" configure "${BUILDDIR}" -Dbuildtype="${BUILDTYPE}" -Dprefix="${INSTALL_PREFIX:-/usr/local}" "$@"
-else
-  "${MESON}" "${BUILDDIR}" --buildtype "${BUILDTYPE}" --prefix "${INSTALL_PREFIX:-/usr/local}" "$@"
+  export PATH=${PATH}:${HOME}/.local/bin
 fi
 
-"${MESON}" compile -C "${BUILDDIR}"
+if [ -f ${BUILDDIR}/build.ninja ]
+then
+  meson configure ${BUILDDIR} -Dbuildtype=${BUILDTYPE} -Dprefix=${INSTALL_PREFIX:-/usr/local} "$@"
+else
+  meson ${BUILDDIR} --buildtype ${BUILDTYPE} --prefix ${INSTALL_PREFIX:-/usr/local} "$@"
+fi
+
+cd ${BUILDDIR}
+
+NINJA=$(awk '/ninja/ {ninja=$4} END {print ninja}' meson-logs/meson-log.txt)
 
 if [ -n "${INSTALL_PREFIX}" ]
 then
-  "${MESON}" install -C "${BUILDDIR}"
+  ${NINJA} install
+else
+  ${NINJA}
 fi
+
+popd
